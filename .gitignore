@@ -1,9 +1,13 @@
 .pytest_cache/
 __pycache__/
+*.py[cod]
 .venv/
+backend/.venv/
 node_modules/
 dist/
 backend/.env
 backend/tmp/
+backend/pytest-cache-files-*/
 local-notebooks/
+tmp/
 .env
