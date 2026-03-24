@@ -1,0 +1,9 @@
+.pytest_cache/
+__pycache__/
+.venv/
+node_modules/
+dist/
+backend/.env
+backend/tmp/
+local-notebooks/
+.env
