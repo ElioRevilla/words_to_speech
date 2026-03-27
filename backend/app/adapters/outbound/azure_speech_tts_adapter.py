@@ -1,5 +1,6 @@
-﻿import asyncio
 from xml.sax.saxutils import escape
+
+import httpx
 
 from app.domain.exceptions import TTSError
 from app.domain.ports import TTSPort
@@ -24,52 +25,29 @@ class AzureSpeechTTSAdapter(TTSPort):
         language_code: str,
         speaking_rate: float = 1.0,
     ) -> bytes:
+        url = f"https://{self._speech_region}.tts.speech.microsoft.com/cognitiveservices/v1"
+        headers = {
+            "Ocp-Apim-Subscription-Key": self._speech_key,
+            "Content-Type": "application/ssml+xml",
+            "X-Microsoft-OutputFormat": "audio-24khz-48kbitrate-mono-mp3",
+            "User-Agent": "wordsound",
+        }
+        ssml = self._build_ssml(text, language_code, speaking_rate)
+
         try:
-            return await asyncio.to_thread(
-                self._synthesize,
-                text,
-                language_code,
-                speaking_rate,
+            async with httpx.AsyncClient(timeout=30.0) as client:
+                response = await client.post(url, content=ssml.encode("utf-8"), headers=headers)
+
+            if response.status_code == 200:
+                return response.content
+
+            raise TTSError(
+                f"Azure Speech REST API returned {response.status_code}: {response.text}"
             )
         except TTSError:
             raise
         except Exception as exc:
             raise TTSError(f"TTS synthesis failed: {exc}") from exc
-
-    def _synthesize(self, text: str, language_code: str, speaking_rate: float) -> bytes:
-        speechsdk = self._load_speechsdk()
-        speech_config = speechsdk.SpeechConfig(
-            subscription=self._speech_key,
-            region=self._speech_region,
-        )
-        speech_config.set_speech_synthesis_output_format(
-            speechsdk.SpeechSynthesisOutputFormat.Audio24Khz48KBitRateMonoMp3
-        )
-
-        synthesizer = speechsdk.SpeechSynthesizer(
-            speech_config=speech_config,
-            audio_config=None,
-        )
-        result = synthesizer.speak_ssml_async(
-            self._build_ssml(text, language_code, speaking_rate)
-        ).get()
-
-        if result.reason == speechsdk.ResultReason.SynthesizingAudioCompleted:
-            return result.audio_data
-
-        details = speechsdk.SpeechSynthesisCancellationDetails.from_result(result)
-        reason = getattr(details.reason, "name", str(details.reason))
-        error_details = details.error_details or "unknown error"
-        raise TTSError(f"Azure Speech synthesis failed ({reason}): {error_details}")
-
-    def _load_speechsdk(self):
-        try:
-            import azure.cognitiveservices.speech as speechsdk
-        except ImportError as exc:
-            raise TTSError(
-                "azure-cognitiveservices-speech is not installed. Run 'pip install -r requirements.txt'."
-            ) from exc
-        return speechsdk
 
     def _build_ssml(self, text: str, language_code: str, speaking_rate: float) -> str:
         voice_name = self._english_voice if language_code.startswith("en") else self._spanish_voice
@@ -77,10 +55,8 @@ class AzureSpeechTTSAdapter(TTSPort):
         rate_value = f"{rate_percent:+d}%"
         escaped_text = escape(text)
 
-        return f"""
-<speak version="1.0" xmlns="http://www.w3.org/2001/10/synthesis" xml:lang="{language_code}">
+        return f"""<speak version="1.0" xmlns="http://www.w3.org/2001/10/synthesis" xml:lang="{language_code}">
   <voice name="{voice_name}">
     <prosody rate="{rate_value}">{escaped_text}</prosody>
   </voice>
-</speak>
-""".strip()
+</speak>""".strip()
