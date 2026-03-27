@@ -52,6 +52,25 @@ jobs:
             --name ${{ env.WEBAPP_NAME }} \
             --container-image-name ${{ env.ACR_NAME }}.azurecr.io/${{ env.IMAGE_NAME }}:${{ github.sha }}
 
+      - name: Configure App Settings
+        run: |
+          az webapp config appsettings set \
+            --resource-group ${{ env.RESOURCE_GROUP }} \
+            --name ${{ env.WEBAPP_NAME }} \
+            --settings \
+              WEBSITES_PORT=8000 \
+              AZURE_OPENAI_API_KEY=${{ secrets.AZURE_OPENAI_API_KEY }} \
+              AZURE_OPENAI_ENDPOINT=${{ secrets.AZURE_OPENAI_ENDPOINT }} \
+              AZURE_OPENAI_DEPLOYMENT=${{ secrets.AZURE_OPENAI_DEPLOYMENT }} \
+              AZURE_OPENAI_API_VERSION=2024-10-21 \
+              AZURE_SPEECH_KEY=${{ secrets.AZURE_SPEECH_KEY }} \
+              AZURE_SPEECH_REGION=${{ secrets.AZURE_SPEECH_REGION }} \
+              AZURE_SPEECH_VOICE_EN=en-US-AvaMultilingualNeural \
+              AZURE_SPEECH_VOICE_ES=es-US-AlonsoNeural \
+              ALLOWED_ORIGINS='["https://${{ env.WEBAPP_NAME }}.azurewebsites.net"]' \
+              API_AUDIO_BASE_URL=https://${{ env.WEBAPP_NAME }}.azurewebsites.net/api/audio \
+              AUDIO_STORAGE_PATH=/tmp/wordsound_audio
+
       - name: Restart Web App
         run: |
           az webapp restart \
